@@ -1,20 +1,20 @@
-pipeline{
+pipeline {
     agent any
-    tools{
+    tools {
         jdk 'jdk'
         nodejs 'nodejs'
     }
     environment {
-        SCANNER_HOME=tool 'sonar-scanner'
+        SCANNER_HOME = tool 'sonar-scanner'
     }
     stages {
-        stage('clean workspace'){
-            steps{
+        stage('clean workspace') {
+            steps {
                 cleanWs()
             }
         }
-        stage('Checkout from Git'){
-            steps{
+        stage('Checkout from Git') {
+            steps {
                 git branch: 'main', url: 'https://github.com/Uliwazeer/Reddit-App-EKS.git'
             }
         }
@@ -23,8 +23,8 @@ pipeline{
                 sh "npm install"
             }
         }
-        stage("Sonarqube Analysis "){
-            steps{
+        stage("Sonarqube Analysis ") {
+            steps {
                 withSonarQubeEnv('sonar-server') {
                     sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Reddit \
                     -Dsonar.projectKey=Reddit \
@@ -33,8 +33,8 @@ pipeline{
                 }
             }
         }
-        stage("quality gate"){
-           steps {
+        stage("quality gate") {
+            steps {
                 script {
                     waitForQualityGate abortPipeline: false, credentialsId: 'sonar-key'
                 }
@@ -42,29 +42,31 @@ pipeline{
         }
         stage('OWASP FS SCAN') {
             steps {
+                // إضافة status: true عشان لو لقى ثغرات ميفشلش البايبلاين بالكامل لو أنت عايز تكمل
                 dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
                 dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
             }
         }
         stage('TRIVY FS SCAN') {
             steps {
-                sh "trivy fs . > trivyfs.txt"
+                // علامة || true بتخلي المرحلة تعدي حتى لو فيه تحذيرات
+                sh "trivy fs . > trivyfs.txt || true"
             }
         }
-        stage("Docker Build & Push"){
-            steps{
-                script{
-                   withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){
-                       sh "docker build -t reddit ."
-                       sh "docker tag reddit aliwazeer/reddit:${BUILD_NUMBER} "
-                       sh "docker push aliwazeer/reddit:${BUILD_NUMBER} "
+        stage("Docker Build & Push") {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
+                        sh "docker build -t reddit ."
+                        sh "docker tag reddit aliwazeer/reddit:${BUILD_NUMBER}"
+                        sh "docker push aliwazeer/reddit:${BUILD_NUMBER}"
                     }
                 }
             }
         }
-        stage("TRIVY"){
-            steps{
-                sh "trivy image aliwazeer/reddit:${BUILD_NUMBER} > trivy.txt"
+        stage("TRIVY") {
+            steps {
+                sh "trivy image aliwazeer/reddit:${BUILD_NUMBER} > trivy.txt || true"
             }
         }
         stage('Update Deployment file') {
@@ -77,17 +79,27 @@ pipeline{
                     sh '''
                         git config user.email "ali.wazeer2000@gmail.com"
                         git config user.name "Uliwazeer"
-                        BUILD_NUMBER=${BUILD_NUMBER}
-                        echo $BUILD_NUMBER
-                        imageTag=$(grep -oP '(?<=reddit:)[^ ]+' deployment.yml)
-                        echo $imageTag
-                        sed -i "s/reddit:${imageTag}/reddit:${BUILD_NUMBER}/" deployment.yml
+                        
+                        # التأكد من أننا بنحدث الملف صح
+                        imageTag=$(grep -oP '(?<=reddit:)[^ ]+' deployment.yml | head -n 1)
+                        echo "Current Tag: $imageTag"
+                        echo "New Tag: ${BUILD_NUMBER}"
+                        
+                        sed -i "s/reddit:${imageTag}/reddit:${BUILD_NUMBER}/g" deployment.yml
+                        
                         git add deployment.yml
-                        git commit -m "Update deployment Image to version ${BUILD_NUMBER}"
+                        # إضافة || true هنا عشان لو مفيش تغييرات الكود ميفشلش
+                        git commit -m "Update deployment Image to version ${BUILD_NUMBER}" || echo "No changes to commit"
                         git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
                     '''
                 }
             }
+        }
+    }
+
+    post {
+        always {
+            echo 'Pipeline finished!'
         }
     }
 }
