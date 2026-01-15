@@ -27,14 +27,16 @@ pipeline{
             steps{
                 withSonarQubeEnv('sonar-server') {
                     sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Reddit \
-                    -Dsonar.projectKey=Reddit '''
+                    -Dsonar.projectKey=Reddit \
+                    -Dsonar.sources=. \
+                    -Dsonar.exclusions=node_modules/**,dist/**,build/**,.next/** '''
                 }
             }
         }
         stage("quality gate"){
            steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-scanner'
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-key'
                 }
             }
         }
@@ -62,30 +64,28 @@ pipeline{
         }
         stage("TRIVY"){
             steps{
-                sh "trivy image aliwazeer/reddit:latest > trivy.txt"
+                sh "trivy image aliwazeer/reddit:${BUILD_NUMBER} > trivy.txt"
             }
         }
         stage('Update Deployment file') {
             environment {
-                GIT_REPO_NAME = "Reddit-App"
+                GIT_REPO_NAME = "Reddit-App-EKS"
                 GIT_USER_NAME = "Uliwazeer"
             }
             steps {
-                dir('K8s'){
-                    withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
-                        sh '''
-                            git config user.email "madithatisreedhar123@gmail.com"
-                            git config user.name "uniquesreedhar"
-                            BUILD_NUMBER=${BUILD_NUMBER}
-                            echo $BUILD_NUMBER
-                            imageTag=$(grep -oP '(?<=reddit:)[^ ]+' deployment.yml)
-                            echo $imageTag
-                            sed -i "s/reddit:${imageTag}/reddit:${BUILD_NUMBER}/" deployment.yml
-                            git add deployment.yml
-                            git commit -m "Update deployment Image to version \${BUILD_NUMBER}"
-                            git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
-                        '''
-                    }
+                withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                    sh '''
+                        git config user.email "ali.wazeer2000@gmail.com"
+                        git config user.name "Uliwazeer"
+                        BUILD_NUMBER=${BUILD_NUMBER}
+                        echo $BUILD_NUMBER
+                        imageTag=$(grep -oP '(?<=reddit:)[^ ]+' deployment.yml)
+                        echo $imageTag
+                        sed -i "s/reddit:${imageTag}/reddit:${BUILD_NUMBER}/" deployment.yml
+                        git add deployment.yml
+                        git commit -m "Update deployment Image to version ${BUILD_NUMBER}"
+                        git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                    '''
                 }
             }
         }
