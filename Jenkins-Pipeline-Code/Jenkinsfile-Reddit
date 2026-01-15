@@ -34,7 +34,7 @@ pipeline{
         stage("quality gate"){
            steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-key'
                 }
             }
         }
@@ -62,7 +62,7 @@ pipeline{
         }
         stage("TRIVY"){
             steps{
-                sh "trivy image aliwazeer7/reddit:latest > trivy.txt"
+                sh "trivy image aliwazeer/reddit:latest > trivy.txt"
             }
         }
         stage('Update Deployment file') {
@@ -72,7 +72,7 @@ pipeline{
             }
             steps {
                 dir('K8s'){
-                    withCredentials([string(credentialsId: 'githubcred', variable: 'GITHUB_TOKEN')]) {
+                    withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
                         sh '''
                             git config user.email "madithatisreedhar123@gmail.com"
                             git config user.name "uniquesreedhar"
