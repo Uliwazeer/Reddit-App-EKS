@@ -15,7 +15,7 @@ pipeline{
         }
         stage('Checkout from Git'){
             steps{
-                git branch: 'main', url: 'https://github.com/uniquesreedhar/Reddit-Project.git'
+                git branch: 'main', url: 'https://github.com/Uliwazeer/Reddit-App-EKS.git'
             }
         }
         stage('Install Dependencies') {
@@ -54,21 +54,21 @@ pipeline{
                 script{
                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){
                        sh "docker build -t reddit ."
-                       sh "docker tag reddit sreedhar8897/reddit:${BUILD_NUMBER} "
-                       sh "docker push sreedhar8897/reddit:${BUILD_NUMBER} "
+                       sh "docker tag reddit aliwazeer/reddit:${BUILD_NUMBER} "
+                       sh "docker push aliwazeer/reddit:${BUILD_NUMBER} "
                     }
                 }
             }
         }
         stage("TRIVY"){
             steps{
-                sh "trivy image sreedhar8897/reddit:latest > trivy.txt"
+                sh "trivy image aliwazeer7/reddit:latest > trivy.txt"
             }
         }
         stage('Update Deployment file') {
             environment {
-                GIT_REPO_NAME = "Reddit-Project"
-                GIT_USER_NAME = "uniquesreedhar"
+                GIT_REPO_NAME = "Reddit-App"
+                GIT_USER_NAME = "Uliwazeer"
             }
             steps {
                 dir('K8s'){
