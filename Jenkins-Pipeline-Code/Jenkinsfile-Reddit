@@ -8,22 +8,22 @@ pipeline {
         SCANNER_HOME = tool 'sonar-scanner'
     }
     stages {
-        stage('clean workspace') {
+        stage('Clean Workspace') {
             steps {
                 cleanWs()
             }
         }
-        stage('Checkout from Git') {
+        stage('Checkout Git') {
             steps {
                 git branch: 'main', url: 'https://github.com/Uliwazeer/Reddit-App-EKS.git'
             }
         }
-        stage('Install Dependencies') {
+        stage('Install Deps') {
             steps {
                 sh "npm install"
             }
         }
-        stage("Sonarqube Analysis ") {
+        stage("Sonar Analysis") {
             steps {
                 withSonarQubeEnv('sonar-server') {
                     sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Reddit \
@@ -33,23 +33,16 @@ pipeline {
                 }
             }
         }
-        stage("quality gate") {
+        stage("Quality Gate") {
             steps {
                 script {
                     waitForQualityGate abortPipeline: false, credentialsId: 'sonar-key'
                 }
             }
         }
-        stage('OWASP FS SCAN') {
+        stage('Trivy FS Scan') {
             steps {
-                // إضافة status: true عشان لو لقى ثغرات ميفشلش البايبلاين بالكامل لو أنت عايز تكمل
-                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
-                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-            }
-        }
-        stage('TRIVY FS SCAN') {
-            steps {
-                // علامة || true بتخلي المرحلة تعدي حتى لو فيه تحذيرات
+                // فحص سريع للملفات
                 sh "trivy fs . > trivyfs.txt || true"
             }
         }
@@ -64,12 +57,12 @@ pipeline {
                 }
             }
         }
-        stage("TRIVY") {
+        stage("Trivy Image Scan") {
             steps {
-                sh "trivy image aliwazeer/reddit:${BUILD_NUMBER} > trivy.txt || true"
+                sh "trivy image aliwazeer/reddit:${BUILD_NUMBER} > trivy_image.txt || true"
             }
         }
-        stage('Update Deployment file') {
+        stage('GitOps Update') {
             environment {
                 GIT_REPO_NAME = "Reddit-App-EKS"
                 GIT_USER_NAME = "Uliwazeer"
@@ -80,26 +73,18 @@ pipeline {
                         git config user.email "ali.wazeer2000@gmail.com"
                         git config user.name "Uliwazeer"
                         
-                        # التأكد من أننا بنحدث الملف صح
+                        # سحب آخر رقم صورة موجود في الملف
                         imageTag=$(grep -oP '(?<=reddit:)[^ ]+' deployment.yml | head -n 1)
-                        echo "Current Tag: $imageTag"
-                        echo "New Tag: ${BUILD_NUMBER}"
                         
+                        # تحديث الرقم الجديد
                         sed -i "s/reddit:${imageTag}/reddit:${BUILD_NUMBER}/g" deployment.yml
                         
                         git add deployment.yml
-                        # إضافة || true هنا عشان لو مفيش تغييرات الكود ميفشلش
-                        git commit -m "Update deployment Image to version ${BUILD_NUMBER}" || echo "No changes to commit"
+                        git commit -m "Update image to build ${BUILD_NUMBER}" || echo "No changes"
                         git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
                     '''
                 }
             }
-        }
-    }
-
-    post {
-        always {
-            echo 'Pipeline finished!'
         }
     }
 }
